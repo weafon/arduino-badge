@@ -250,7 +250,7 @@ bool check_btframe(uint8_t* pbuf)
 	int i;
 	if (pbuf[0]!='W')
 	{
-		Serial.printf("got %c not W at header\n", pbuf[0]);
+		Serial.printf("got 0x%x (%c) not W at header\n", pbuf[0]);
 		return false;
 	}
 		
