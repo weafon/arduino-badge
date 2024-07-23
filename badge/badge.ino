@@ -121,12 +121,12 @@ unsigned long tm=0;
 unsigned long tm_curr, tm_frame;
 void loop() 
 {
-	
+	int len;
 	if (BT.available()>0) 
 	{
-		if (RecvBTPayload(buf_bt, SZ_BTFRAME)) 
+		if ((len=RecvBTPayload(buf_bt, SZ_BTFRAME))>SZ_PAYLOAD_BT/2) 
 		{
-			process_btframe(buf_bt);
+			process_btframe(buf_bt, (len-SZ_HEADER_BT)-(len%2));
 			cn_process++;				
 		} else {
 			abort_btframe();
@@ -144,7 +144,7 @@ void loop()
 	}
 }
 
-bool RecvBTPayload(uint8_t* pbuf, int sz)
+int RecvBTPayload(uint8_t* pbuf, int sz)
 {
 	int i;
 	unsigned long tm_wait = millis();
@@ -152,15 +152,15 @@ bool RecvBTPayload(uint8_t* pbuf, int sz)
 	{
 		while(BT.available() <= 0) 
 		{
-			if ((millis()-tm_wait)>500) {
+			if ((millis()-tm_wait)>200) {
 				off_rxframe = i;
-				return false;
+				return i;
 			}
 		}
 		pbuf[i] = BT.read();
 		tm_wait = millis();
 	}
-	return true;
+	return sz;
 }
 
 void abort_btframe()
@@ -169,7 +169,7 @@ void abort_btframe()
 	cn_process++;
 	BT.write(1);
 }
-void process_btframe(uint8_t* pbuf) 
+void process_btframe(uint8_t* pbuf, int len_payload) 
 {
 	size_t cn_read=0;
 	if (check_btframe(pbuf)==false)
@@ -178,6 +178,8 @@ void process_btframe(uint8_t* pbuf)
 		BT.write(1);
 		return;
 	}
+	if (len_payload!=SZ_PAYLOAD_BT)
+		cn_miss++;
 	/*
 	memcpy(buf_pcm+off_pcmframe, pbuf+SZ_HEADER_BT, SZ_PAYLOAD_BT);
 	off_pcmframe+=SZ_PAYLOAD_BT;
@@ -185,7 +187,7 @@ void process_btframe(uint8_t* pbuf)
 		i2s_write(I2S_NUM_1, (int16_t*)buf_pcm, SZ_PAYLOAD_PCM, &cn_read, portMAX_DELAY);
 		off_pcmframe=0;
 	}*/
-	i2s_write(I2S_NUM_1, (int16_t*)(pbuf+SZ_HEADER_BT), SZ_PAYLOAD_BT, &cn_read, portMAX_DELAY);
+	i2s_write(I2S_NUM_1, (int16_t*)(pbuf+SZ_HEADER_BT), len_payload, &cn_read, portMAX_DELAY);
 	BT.write(0);
 	return;
 }
