@@ -13,7 +13,6 @@ int16_t buffer;  // Determine the Sampling time
 int cnt = 0;
 
 // you shouldn't need to change these settings
-#define SAMPLE_BUFFER_SIZE 256
 
 #define SAMPLE_RATE 16000
 // most microphones will probably default to left channel but you may need to tie the L/R pin low
@@ -102,6 +101,8 @@ void setup() {
 	Serial.println(3 - i);
   }
 }
+#define SAMPLE_BUFFER_SIZE 1024
+
 #define SZ_HEADER_BT 2
 #define SZ_PAYLOAD_BT (SAMPLE_BUFFER_SIZE*sizeof(int16_t))
 #define SZ_BTFRAME (SZ_HEADER_BT+SZ_PAYLOAD_BT)
@@ -113,7 +114,7 @@ int off_pcmframe = 0;
 int last_off = 0;
 int cn_fail=0;
 int cn_process=0;
-int last_process=0;
+int last_process =0;
 int cn_miss=0;
 unsigned long tm_start=0;
 unsigned long tm=0;
@@ -127,29 +128,32 @@ void loop()
 		if (off_rxframe==0)
 			tm_frame = tm_curr;
 		off_rxframe++;
-		if (off_rxframe==SZ_BTFRAME)
-		{
-			process_btframe(buf_bt);
-			off_rxframe=0;
-			cn_process++;				
+		if (off_rxframe==2) {
+			if (RecvBTPayload(buf_bt+SZ_HEADER_BT, SZ_PAYLOAD_BT)) {
+				off_rxframe+=SZ_PAYLOAD_BT;
+				process_btframe(buf_bt);
+				off_rxframe=0;
+				cn_process++;				
+			} else {
+				abort_btframe();
+				return;
+			}
 		}
 		return;
-	} else {
-		
-		if ((off_rxframe>0)&&((tm_curr-tm_frame)>1000))
-		{
-			Serial.printf("tm curr %lu frame %lu timeout\n", tm_curr, tm_frame);
-			abort_btframe();
-			return;
-		}
+	}
+	
+	if ((off_rxframe>0)&&(tm_curr-tm_frame>1000))
+	{
+		abort_btframe();
+		return;
 	}
 
 	if (((tm_curr-tm_start)>2000)&&(cn_process!=last_process))
 	{
-		Serial.printf("[%lu] off= %d got %d bad %d miss %d last_off %d\n", tm_curr, off_rxframe, cn_process,cn_fail, cn_miss, last_off);
+		Serial.printf("[%lu] off= %d got %d bad %d miss %d last_off %d\n", tm, off_rxframe, cn_process,cn_fail, cn_miss, last_off);
 		tm_start=tm_curr;
 		last_off=0;
-		last_process=cn_process;		
+		last_process = cn_process;
 	}
 }
 
@@ -161,11 +165,12 @@ bool RecvBTPayload(uint8_t* pbuf, int sz)
 	{
 		while(BT.available() <= 0) 
 		{
-			if ((millis()-tm_wait)>100) {
+			if ((millis()-tm_wait)>500) {
 				return false;
 			}
 		}
 		pbuf[i] = BT.read();
+		tm_wait = millis();
 	}
 	return true;
 }
@@ -204,17 +209,14 @@ bool check_btframe(uint8_t* pbuf)
 	int i;
 	if (pbuf[0]!='W')
 		return false;
-	
+	return true;
 	uint8_t chksum = 0;
-	for(i=0;i<8;i++) 
+	for(i=0;i<SZ_PAYLOAD_BT;i++) 
 		chksum^=pbuf[i+SZ_HEADER_BT];
 	if ((chksum^pbuf[1])==0)
 		return true;
 	else {
 		Serial.printf("expect 0x%x real 0x%d\n", pbuf[1], chksum);
-		for(i=0;i<16;i++)
-			Serial.printf("%d ", (int8_t)pbuf[i+SZ_HEADER_BT]);
-		Serial.printf("\n");		
 		return false;
 	}
 		
