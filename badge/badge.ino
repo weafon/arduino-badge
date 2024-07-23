@@ -121,39 +121,26 @@ unsigned long tm=0;
 unsigned long tm_curr, tm_frame;
 void loop() 
 {
-	tm_curr = millis();
+	
 	if (BT.available()>0) 
 	{
-		buf_bt[off_rxframe] = BT.read();
-		if (off_rxframe==0)
-			tm_frame = tm_curr;
-		off_rxframe++;
-		if (off_rxframe==2) {
-			if (RecvBTPayload(buf_bt+SZ_HEADER_BT, SZ_PAYLOAD_BT)) {
-				off_rxframe+=SZ_PAYLOAD_BT;
-				process_btframe(buf_bt);
-				off_rxframe=0;
-				cn_process++;				
-			} else {
-				abort_btframe();
-				return;
-			}
+		if (RecvBTPayload(buf_bt, SZ_BTFRAME)) 
+		{
+			process_btframe(buf_bt);
+			cn_process++;				
+		} else {
+			abort_btframe();
+			return;
 		}
-		return;
-	}
-	
-	if ((off_rxframe>0)&&(tm_curr-tm_frame>1000))
-	{
-		abort_btframe();
-		return;
-	}
-
-	if (((tm_curr-tm_start)>2000)&&(cn_process!=last_process))
-	{
-		Serial.printf("[%lu] off= %d got %d bad %d miss %d last_off %d\n", tm, off_rxframe, cn_process,cn_fail, cn_miss, last_off);
-		tm_start=tm_curr;
-		last_off=0;
-		last_process = cn_process;
+	} else {
+		tm_curr = millis();
+		if (((tm_curr-tm_start)>1000)&&(cn_process!=last_process))
+		{
+			Serial.printf("[%lu] off= %d got %d bad %d miss %d last_off %d\n", tm, off_rxframe, cn_process,cn_fail, cn_miss, last_off);
+			tm_start=tm_curr;
+			last_off=0;
+			last_process = cn_process;
+		}
 	}
 }
 
@@ -166,6 +153,7 @@ bool RecvBTPayload(uint8_t* pbuf, int sz)
 		while(BT.available() <= 0) 
 		{
 			if ((millis()-tm_wait)>500) {
+				off_rxframe = i;
 				return false;
 			}
 		}
@@ -179,8 +167,6 @@ void abort_btframe()
 {
 	cn_miss++;
 	cn_process++;
-	last_off = off_rxframe;
-	off_rxframe=0;
 	BT.write(1);
 }
 void process_btframe(uint8_t* pbuf) 
@@ -208,7 +194,11 @@ bool check_btframe(uint8_t* pbuf)
 {
 	int i;
 	if (pbuf[0]!='W')
+	{
+		Serial.printf("got %c not W at header\n", pbuf[0]);
 		return false;
+	}
+		
 	return true;
 	uint8_t chksum = 0;
 	for(i=0;i<SZ_PAYLOAD_BT;i++) 
