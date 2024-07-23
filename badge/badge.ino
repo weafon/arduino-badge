@@ -107,8 +107,8 @@ void setup() {
 #define SZ_PAYLOAD_BT (SAMPLE_BUFFER_SIZE*sizeof(int16_t))
 #define SZ_BTFRAME (SZ_HEADER_BT+SZ_PAYLOAD_BT)
 uint8_t buf_bt[SZ_PAYLOAD_BT + SZ_HEADER_BT];
-#define SZ_PAYLOAD_PCM (SZ_PAYLOAD_BT*4)
-uint8_t buf_pcm[SZ_PAYLOAD_PCM];
+//#define SZ_PAYLOAD_PCM (SZ_PAYLOAD_BT*4)
+//uint8_t buf_pcm[SZ_PAYLOAD_PCM];
 int off_rxframe = 0;
 int off_pcmframe = 0;
 int last_off = 0;
@@ -129,19 +129,72 @@ void loop()
 			process_btframe(buf_bt, (len-SZ_HEADER_BT)-(len%2));
 			cn_process++;				
 		} else {
-			abort_btframe();
-			return;
+			abort_btframe();			
 		}
+	} else if (digitalRead(BUTTON_PIN)==HIGH) {
+		RecordThenBTSend(buf_bt+SZ_HEADER_BT);
 	} else {
-		tm_curr = millis();
-		if (((tm_curr-tm_start)>1000)&&(cn_process!=last_process))
-		{
-			Serial.printf("[%lu] off= %d got %d bad %d miss %d last_off %d\n", tm, off_rxframe, cn_process,cn_fail, cn_miss, last_off);
-			tm_start=tm_curr;
-			last_off=0;
-			last_process = cn_process;
-		}
+		EndRecordIfNeed();
+		UpdatePlayStat();
 	}
+}
+
+void UpdatePlayStat()
+{
+	tm_curr = millis();
+	if (((tm_curr-tm_start)>1000)&&(cn_process!=last_process))
+	{
+		Serial.printf("[%lu] off= %d got %d bad %d miss %d last_off %d\n", tm_curr, off_rxframe, cn_process,cn_fail, cn_miss, last_off);
+		tm_start=tm_curr;
+		last_off=0;
+		last_process = cn_process;
+	}
+
+}
+
+unsigned long tm_start_rec=0;
+int cn_txframe=0;
+int cn_rec_bytes=0;
+void RecordThenBTSend(uint8_t* pbuf)
+{
+	if (tm_start_rec == 0) {
+      digitalWrite(LED_PIN, HIGH);
+      delay(500);
+      tm_start_rec = millis();
+    }
+	mic2btsend(pbuf);
+}
+void EndRecordIfNeed() 
+{
+	if (tm_start_rec>0)
+	{
+    	if ((millis() - tm_start_rec)>0) {
+        	for (int i = 0; i < SZ_PAYLOAD_BT/2; i++)
+          		BT.write(0);
+        	Serial.printf("rec period %lu ms %d frames %d bytes\n", millis() - tm_start_rec, cn_txframe,cn_rec_bytes);
+      	} else
+        	Serial.print(".");
+		tm_start_rec = 0;
+		cn_txframe = 0;
+		cn_rec_bytes = 0;
+		digitalWrite(LED_PIN, LOW);
+
+	}
+}
+
+bool mic2btsend(uint8_t* pbuf)
+{
+    size_t rx = 0;
+    i2s_read(I2S_NUM_0, pbuf, SZ_PAYLOAD_BT, &rx, portMAX_DELAY);
+	BT.write(pbuf,rx);
+	cn_txframe++;
+	cn_rec_bytes+=rx;	
+	if (rx!=SZ_PAYLOAD_BT)
+	{
+		Serial.printf("short recording %lu\n", rx);
+		return false;
+	}
+	return true;
 }
 
 int RecvBTPayload(uint8_t* pbuf, int sz)
