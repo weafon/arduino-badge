@@ -144,10 +144,13 @@ void UpdatePlayStat()
 	tm_curr = millis();
 	if (((tm_curr-tm_start)>1000)&&(cn_process!=last_process))
 	{
-		Serial.printf("[%lu] off= %d got %d bad %d miss %d last_off %d\n", tm_curr, off_rxframe, cn_process,cn_fail, cn_miss, last_off);
+		Serial.printf("[%lu] off= %d got %d bad %d losttail %d\n", tm_curr, off_rxframe, cn_process,cn_fail, cn_miss);
 		tm_start=tm_curr;
 		last_off=0;
 		last_process = cn_process;
+    cn_process=0;
+    cn_fail=0;
+    cn_miss=0;
 	}
 
 }
