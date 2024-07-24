@@ -127,7 +127,6 @@ void loop()
 		if ((len=RecvBTPayload(buf_bt, SZ_BTFRAME))>SZ_PAYLOAD_BT/2) 
 		{
 			process_btframe(buf_bt, (len-SZ_HEADER_BT)-(len%2));
-			cn_process++;				
 		} else {
 			abort_btframe();			
 		}
@@ -162,7 +161,7 @@ void RecordThenBTSend(uint8_t* pbuf)
 {
 	if (tm_start_rec == 0) {
       digitalWrite(LED_PIN, HIGH);
-      delay(500);
+      //delay(500);
       tm_start_rec = millis();
     }
 	mic2btsend(pbuf);
@@ -236,15 +235,11 @@ void process_btframe(uint8_t* pbuf, int len_payload)
 	}
 	if (len_payload!=SZ_PAYLOAD_BT)
 		cn_miss++;
-	/*
-	memcpy(buf_pcm+off_pcmframe, pbuf+SZ_HEADER_BT, SZ_PAYLOAD_BT);
-	off_pcmframe+=SZ_PAYLOAD_BT;
-	if (off_pcmframe==SZ_PAYLOAD_PCM) {
-		i2s_write(I2S_NUM_1, (int16_t*)buf_pcm, SZ_PAYLOAD_PCM, &cn_read, portMAX_DELAY);
-		off_pcmframe=0;
-	}*/
+
 	i2s_write(I2S_NUM_1, (int16_t*)(pbuf+SZ_HEADER_BT), len_payload, &cn_read, portMAX_DELAY);
 	BT.write(0);
+  off_rxframe=0;
+  cn_process++;				
 	return;
 }
 
