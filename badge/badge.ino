@@ -141,7 +141,7 @@ void loop()
 void UpdatePlayStat()
 {
 	tm_curr = millis();
-	if (((tm_curr-tm_start)>1000)&&(cn_process!=last_process))
+	if (((tm_curr-tm_start)>5000)&&(cn_process!=last_process))
 	{
 		Serial.printf("[%lu] off= %d got %d bad %d losttail %d\n", tm_curr, off_rxframe, cn_process,cn_fail, cn_miss);
 		tm_start=tm_curr;
@@ -170,10 +170,11 @@ void EndRecordIfNeed()
 {
 	if (tm_start_rec>0)
 	{
-    	if ((millis() - tm_start_rec)>0) {
+      unsigned long tm_curr = millis();
+    	if ((tm_curr - tm_start_rec)>0) {
         	for (int i = 0; i < SZ_PAYLOAD_BT/2; i++)
           		BT.write(0);
-        	Serial.printf("rec period %lu ms %d frames %d bytes\n", millis() - tm_start_rec, cn_txframe,cn_rec_bytes);
+        	Serial.printf("[%lu] rec period %lu ms %d frames %d bytes\n", tm_curr, tm_curr - tm_start_rec, cn_txframe,cn_rec_bytes);
       	} else
         	Serial.print(".");
 		tm_start_rec = 0;
@@ -186,8 +187,8 @@ void EndRecordIfNeed()
 
 bool mic2btsend(uint8_t* pbuf)
 {
-    size_t rx = 0;
-    i2s_read(I2S_NUM_0, pbuf, SZ_PAYLOAD_BT, &rx, portMAX_DELAY);
+  size_t rx = 0;
+  i2s_read(I2S_NUM_0, pbuf, SZ_PAYLOAD_BT, &rx, portMAX_DELAY);
 	BT.write(pbuf,rx);
 	cn_txframe++;
 	cn_rec_bytes+=rx;	
@@ -222,6 +223,7 @@ void abort_btframe()
 {
 	cn_miss++;
 	cn_process++;
+  off_rxframe=0;
 	BT.write(1);
 }
 void process_btframe(uint8_t* pbuf, int len_payload) 
@@ -248,11 +250,11 @@ bool check_btframe(uint8_t* pbuf)
 	int i;
 	if (pbuf[0]!='W')
 	{
-		Serial.printf("got 0x%x (%c) not W at header\n", pbuf[0]);
+		Serial.printf("got 0x%x (%c) not 0x%x (W) at header\n", pbuf[0],'W');
 		return false;
 	}
-		
 	return true;
+/*  
 	uint8_t chksum = 0;
 	for(i=0;i<SZ_PAYLOAD_BT;i++) 
 		chksum^=pbuf[i+SZ_HEADER_BT];
@@ -262,7 +264,7 @@ bool check_btframe(uint8_t* pbuf)
 		Serial.printf("expect 0x%x real 0x%d\n", pbuf[1], chksum);
 		return false;
 	}
-		
+*/		
 }
 
 
