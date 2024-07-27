@@ -94,167 +94,147 @@ void setup() {
   Serial.println("");
   Serial.println("Started badge... 20240723");
   for (i = 0; i < 3; i++) {
-	digitalWrite(LED_PIN, HIGH);
-	delay(250);
-	digitalWrite(LED_PIN, LOW);
-	delay(250);
-	Serial.println(3 - i);
+    digitalWrite(LED_PIN, HIGH);
+    delay(250);
+    digitalWrite(LED_PIN, LOW);
+    delay(250);
+    Serial.println(3 - i);
   }
 }
 #define SAMPLE_BUFFER_SIZE 1024
 
 #define SZ_HEADER_BT 2
-#define SZ_PAYLOAD_BT (SAMPLE_BUFFER_SIZE*sizeof(int16_t))
-#define SZ_BTFRAME (SZ_HEADER_BT+SZ_PAYLOAD_BT)
+#define SZ_PAYLOAD_BT (SAMPLE_BUFFER_SIZE * sizeof(int16_t))
+#define SZ_BTFRAME (SZ_HEADER_BT + SZ_PAYLOAD_BT)
 uint8_t buf_bt[SZ_PAYLOAD_BT + SZ_HEADER_BT];
 //#define SZ_PAYLOAD_PCM (SZ_PAYLOAD_BT*4)
 //uint8_t buf_pcm[SZ_PAYLOAD_PCM];
 int off_rxframe = 0;
 int off_pcmframe = 0;
 int last_off = 0;
-int cn_fail=0;
-int cn_process=0;
-int last_process =0;
-int cn_miss=0;
-unsigned long tm_start=0;
-unsigned long tm=0;
+int cn_fail = 0;
+int cn_process = 0;
+int last_process = 0;
+int cn_miss = 0;
+unsigned long tm_start = 0;
+unsigned long tm = 0;
 unsigned long tm_curr, tm_frame;
-void loop() 
-{
-	int len;
-	if (BT.available()>0) 
-	{
-		if ((len=RecvBTPayload(buf_bt, SZ_BTFRAME))>SZ_PAYLOAD_BT/2) 
-		{
-			process_btframe(buf_bt, (len-SZ_HEADER_BT)-(len%2));
-		} else {
-			abort_btframe();			
-		}
-	} else if (digitalRead(BUTTON_PIN)==HIGH) {
-		RecordThenBTSend(buf_bt+SZ_HEADER_BT);
-	} else {
-		EndRecordIfNeed();
-		UpdatePlayStat();
-	}
-}
-
-void UpdatePlayStat()
-{
-	tm_curr = millis();
-	if (((tm_curr-tm_start)>5000)&&(cn_process!=last_process))
-	{
-		Serial.printf("[%lu] off= %d got %d bad %d losttail %d\n", tm_curr, off_rxframe, cn_process,cn_fail, cn_miss);
-		tm_start=tm_curr;
-		last_off=0;
-		last_process = cn_process;
-    cn_process=0;
-    cn_fail=0;
-    cn_miss=0;
-	}
-
-}
-
-unsigned long tm_start_rec=0;
-int cn_txframe=0;
-int cn_rec_bytes=0;
-void RecordThenBTSend(uint8_t* pbuf)
-{
-	if (tm_start_rec == 0) {
-      digitalWrite(LED_PIN, HIGH);
-      //delay(500);
-      tm_start_rec = millis();
+void loop() {
+  int len;
+  if (BT.available() > 0) {
+    if ((len = RecvBTPayload(buf_bt, SZ_BTFRAME)) > SZ_PAYLOAD_BT / 2) {
+      process_btframe(buf_bt, (len - SZ_HEADER_BT) - (len % 2));
+    } else {
+      abort_btframe();
     }
-	mic2btsend(pbuf);
-}
-void EndRecordIfNeed() 
-{
-	if (tm_start_rec>0)
-	{
-      unsigned long tm_curr = millis();
-    	if ((tm_curr - tm_start_rec)>0) {
-        	for (int i = 0; i < SZ_PAYLOAD_BT/2; i++)
-          		BT.write(0);
-        	Serial.printf("[%lu] rec period %lu ms %d frames %d bytes\n", tm_curr, tm_curr - tm_start_rec, cn_txframe,cn_rec_bytes);
-      	} else
-        	Serial.print(".");
-		tm_start_rec = 0;
-		cn_txframe = 0;
-		cn_rec_bytes = 0;
-		digitalWrite(LED_PIN, LOW);
-
-	}
+  } else if (digitalRead(BUTTON_PIN) == HIGH) {
+    RecordThenBTSend(buf_bt + SZ_HEADER_BT);
+  } else {
+    EndRecordIfNeed();
+    UpdatePlayStat();
+  }
 }
 
-bool mic2btsend(uint8_t* pbuf)
-{
+void UpdatePlayStat() {
+  tm_curr = millis();
+  if (((tm_curr - tm_start) > 5000) && (cn_process != last_process)) {
+    Serial.printf("[%lu] off= %d got %d bad %d losttail %d\n", tm_curr, off_rxframe, cn_process, cn_fail, cn_miss);
+    tm_start = tm_curr;
+    last_off = 0;
+    last_process = cn_process;
+    cn_process = 0;
+    cn_fail = 0;
+    cn_miss = 0;
+  }
+}
+
+unsigned long tm_start_rec = 0;
+int cn_txframe = 0;
+int cn_rec_bytes = 0;
+void RecordThenBTSend(uint8_t* pbuf) {
+  if (tm_start_rec == 0) {
+    digitalWrite(LED_PIN, HIGH);
+    //delay(500);
+    tm_start_rec = millis();
+  }
+  mic2btsend(pbuf);
+}
+void EndRecordIfNeed() {
+  if (tm_start_rec > 0) {
+    unsigned long tm_curr = millis();
+    if ((tm_curr - tm_start_rec) > 0) {
+      for (int i = 0; i < SZ_PAYLOAD_BT / 2; i++)
+        BT.write(0);
+      Serial.printf("[%lu] rec period %lu ms %d frames %d bytes\n", tm_curr, tm_curr - tm_start_rec, cn_txframe, cn_rec_bytes);
+    } else
+      Serial.print(".");
+    tm_start_rec = 0;
+    cn_txframe = 0;
+    cn_rec_bytes = 0;
+    digitalWrite(LED_PIN, LOW);
+  }
+}
+
+bool mic2btsend(uint8_t* pbuf) {
   size_t rx = 0;
   i2s_read(I2S_NUM_0, pbuf, SZ_PAYLOAD_BT, &rx, portMAX_DELAY);
-	BT.write(pbuf,rx);
-	cn_txframe++;
-	cn_rec_bytes+=rx;	
-	if (rx!=SZ_PAYLOAD_BT)
-	{
-		Serial.printf("short recording %lu\n", rx);
-		return false;
-	}
-	return true;
+  BT.write(pbuf, rx);
+  cn_txframe++;
+  cn_rec_bytes += rx;
+  if (rx != SZ_PAYLOAD_BT) {
+    Serial.printf("short recording %lu\n", rx);
+    return false;
+  }
+  return true;
 }
 
-int RecvBTPayload(uint8_t* pbuf, int sz)
-{
-	int i;
-	unsigned long tm_wait = millis();
-	for(i=0;i<sz;i++)
-	{
-		while(BT.available() <= 0) 
-		{
-			if ((millis()-tm_wait)>200) {
-				off_rxframe = i;
-				return i;
-			}
-		}
-		pbuf[i] = BT.read();
-		tm_wait = millis();
-	}
-	return sz;
+int RecvBTPayload(uint8_t* pbuf, int sz) {
+  int i;
+  unsigned long tm_wait = millis();
+  for (i = 0; i < sz; i++) {
+    while (BT.available() <= 0) {
+      if ((millis() - tm_wait) > 200) {
+        off_rxframe = i;
+        return i;
+      }
+    }
+    pbuf[i] = BT.read();
+    tm_wait = millis();
+  }
+  return sz;
 }
 
-void abort_btframe()
-{
-	cn_miss++;
-	cn_process++;
-  off_rxframe=0;
-	BT.write(1);
+void abort_btframe() {
+  cn_miss++;
+  cn_process++;
+  off_rxframe = 0;
+  BT.write(1);
 }
-void process_btframe(uint8_t* pbuf, int len_payload) 
-{
-	size_t cn_read=0;
-	if (check_btframe(pbuf)==false)
-	{
-		cn_fail++;
-		BT.write(1);
-		return;
-	}
-	if (len_payload!=SZ_PAYLOAD_BT)
-		cn_miss++;
+void process_btframe(uint8_t* pbuf, int len_payload) {
+  size_t cn_read = 0;
+  if (check_btframe(pbuf) == false) {
+    cn_fail++;
+    BT.write(1);
+    return;
+  }
+  if (len_payload != SZ_PAYLOAD_BT)
+    cn_miss++;
 
-	i2s_write(I2S_NUM_1, (int16_t*)(pbuf+SZ_HEADER_BT), len_payload, &cn_read, portMAX_DELAY);
-	BT.write(0);
-  off_rxframe=0;
-  cn_process++;				
-	return;
+  i2s_write(I2S_NUM_1, (int16_t*)(pbuf + SZ_HEADER_BT), len_payload, &cn_read, portMAX_DELAY);
+  BT.write(0);
+  off_rxframe = 0;
+  cn_process++;
+  return;
 }
 
-bool check_btframe(uint8_t* pbuf)
-{
-	int i;
-	if (pbuf[0]!='W')
-	{
-		Serial.printf("got 0x%x (%c) not 0x%x (W) at header\n", pbuf[0],'W');
-		return false;
-	}
-	return true;
-/*  
+bool check_btframe(uint8_t* pbuf) {
+  int i;
+  if (pbuf[0] != 'W') {
+    Serial.printf("got 0x%x (%c) not 0x%x (W) at header\n", pbuf[0], 'W');
+    return false;
+  }
+  return true;
+  /*  
 	uint8_t chksum = 0;
 	for(i=0;i<SZ_PAYLOAD_BT;i++) 
 		chksum^=pbuf[i+SZ_HEADER_BT];
@@ -264,25 +244,5 @@ bool check_btframe(uint8_t* pbuf)
 		Serial.printf("expect 0x%x real 0x%d\n", pbuf[1], chksum);
 		return false;
 	}
-*/		
+*/
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
